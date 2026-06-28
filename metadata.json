@@ -1,0 +1,6 @@
+{
+  "name": "Turbofan Predictive Maintenance Dashboard",
+  "description": "Industrial AI SaaS dashboard for monitoring turbofan engine fleet health and predicting remaining useful life (RUL).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
