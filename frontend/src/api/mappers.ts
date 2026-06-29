@@ -26,6 +26,18 @@ import type {
   SensorReading,
 } from './types';
 
+const API_TO_UI_SENSOR: Partial<Record<string, keyof Omit<SensorReading, 'cycle'>>> = {
+  sensor_2: 'T24',
+  sensor_3: 'T30',
+  sensor_4: 'T50',
+  sensor_5: 'P30',
+  sensor_6: 'NF',
+  sensor_7: 'NC',
+  sensor_8: 'BPR',
+  sensor_9: 'HT3',
+  sensor_10: 'W31',
+};
+
 const SENSOR_UI_KEYS: (keyof Omit<SensorReading, 'cycle'>)[] = [
   'T24',
   'T30',
@@ -73,6 +85,7 @@ function toFleetKpis(engines: EngineSummary[], openAlerts: number): FleetKPIs {
 export function mapFleetEngine(engine: ApiFleetEngine): EngineSummary {
   return {
     engineId: engine.engine_id,
+    externalEngineId: engine.external_engine_id,
     fleetGroup: 'C-MAPSS FD001',
     modelType: 'Turbofan',
     latestCycle: engine.latest_cycle,
@@ -154,7 +167,10 @@ export function mapSensorHistory(response: ApiSensorHistoryResponse): SensorRead
     };
 
     SENSOR_UI_KEYS.forEach((uiKey, sensorIndex) => {
-      const apiKey = seriesKeys[sensorIndex] ?? `sensor_${sensorIndex + 1}`;
+      const apiKey =
+        Object.entries(API_TO_UI_SENSOR).find(([, mapped]) => mapped === uiKey)?.[0] ??
+        seriesKeys[sensorIndex] ??
+        `sensor_${sensorIndex + 1}`;
       const values = response.series[apiKey];
       if (values?.[index] !== undefined) {
         reading[uiKey] = values[index];

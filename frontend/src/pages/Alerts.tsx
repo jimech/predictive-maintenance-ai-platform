@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { exportToCsv } from '../lib/exportCsv';
 
 export const Alerts: React.FC = () => {
-  const { data: alerts, isLoading } = useAlerts();
+  const { data: alerts, isLoading, error, refetch } = useAlerts();
   const ackMutation = useAcknowledgeAlert();
   const resolveMutation = useResolveAlert();
   const { user } = useAuth();
@@ -22,6 +22,18 @@ export const Alerts: React.FC = () => {
 
   if (isLoading) {
     return <div className="p-8 text-center font-mono text-slate-500">Loading alerts...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400">
+        <p className="font-mono font-bold mb-2">Failed to load alerts.</p>
+        <p className="text-xs font-mono mb-4">{error.message}</p>
+        <button onClick={() => refetch()} className="px-3 py-1 bg-rose-500 text-white rounded text-xs font-bold">
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

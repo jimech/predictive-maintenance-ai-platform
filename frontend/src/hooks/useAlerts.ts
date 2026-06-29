@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import type { AlertItem } from '../api/types';
+import { apiQueryKey } from '../lib/queryKeys';
 import toast from 'react-hot-toast';
 
 export function useAlerts() {
   return useQuery<AlertItem[], Error>({
-    queryKey: ['alerts'],
+    queryKey: apiQueryKey('alerts'),
     queryFn: () => apiClient.getAlerts(),
     refetchInterval: 10000,
   });
@@ -17,10 +18,10 @@ export function useAcknowledgeAlert() {
     mutationFn: ({ alertId, userName }: { alertId: string; userName?: string }) =>
       apiClient.acknowledgeAlert(alertId, userName),
     onMutate: async ({ alertId, userName }) => {
-      await queryClient.cancelQueries({ queryKey: ['alerts'] });
-      const previousAlerts = queryClient.getQueryData<AlertItem[]>(['alerts']);
+      await queryClient.cancelQueries({ queryKey: apiQueryKey('alerts') });
+      const previousAlerts = queryClient.getQueryData<AlertItem[]>(apiQueryKey('alerts'));
 
-      queryClient.setQueryData<AlertItem[]>(['alerts'], (old) => {
+      queryClient.setQueryData<AlertItem[]>(apiQueryKey('alerts'), (old) => {
         if (!old) return old;
         return old.map((alert) =>
           alert.alertId === alertId
@@ -31,9 +32,9 @@ export function useAcknowledgeAlert() {
 
       return { previousAlerts };
     },
-    onError: (err, variables, context) => {
+    onError: (_err, _variables, context) => {
       if (context?.previousAlerts) {
-        queryClient.setQueryData(['alerts'], context.previousAlerts);
+        queryClient.setQueryData(apiQueryKey('alerts'), context.previousAlerts);
       }
       toast.error('Failed to acknowledge alert');
     },
@@ -41,7 +42,7 @@ export function useAcknowledgeAlert() {
       toast.success('Alert acknowledged');
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      queryClient.invalidateQueries({ queryKey: apiQueryKey('alerts') });
     },
   });
 }
@@ -51,23 +52,21 @@ export function useResolveAlert() {
   return useMutation({
     mutationFn: (alertId: string) => apiClient.resolveAlert(alertId),
     onMutate: async (alertId) => {
-      await queryClient.cancelQueries({ queryKey: ['alerts'] });
-      const previousAlerts = queryClient.getQueryData<AlertItem[]>(['alerts']);
+      await queryClient.cancelQueries({ queryKey: apiQueryKey('alerts') });
+      const previousAlerts = queryClient.getQueryData<AlertItem[]>(apiQueryKey('alerts'));
 
-      queryClient.setQueryData<AlertItem[]>(['alerts'], (old) => {
+      queryClient.setQueryData<AlertItem[]>(apiQueryKey('alerts'), (old) => {
         if (!old) return old;
         return old.map((alert) =>
-          alert.alertId === alertId
-            ? { ...alert, status: 'resolved' }
-            : alert
+          alert.alertId === alertId ? { ...alert, status: 'resolved' } : alert
         );
       });
 
       return { previousAlerts };
     },
-    onError: (err, variables, context) => {
+    onError: (_err, _variables, context) => {
       if (context?.previousAlerts) {
-        queryClient.setQueryData(['alerts'], context.previousAlerts);
+        queryClient.setQueryData(apiQueryKey('alerts'), context.previousAlerts);
       }
       toast.error('Failed to resolve alert');
     },
@@ -75,8 +74,8 @@ export function useResolveAlert() {
       toast.success('Alert resolved');
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['fleet'] });
+      queryClient.invalidateQueries({ queryKey: apiQueryKey('alerts') });
+      queryClient.invalidateQueries({ queryKey: apiQueryKey('fleet') });
     },
   });
 }

@@ -5,12 +5,13 @@ import { useEngine, useEngineSensors, usePredictRul } from '../hooks/useEngine';
 import { useAlerts } from '../hooks/useAlerts';
 import { PlotlyChart } from '../components/PlotlyChart';
 import { RiskBadge } from '../components/RiskBadge';
+import { formatEngineLabel } from '../lib/utils';
 
 export const EngineDetail: React.FC = () => {
   const { engineId } = useParams<{ engineId: string }>();
   const navigate = useNavigate();
   
-  const { data: engine, isLoading: isEngineLoading, error: engineError } = useEngine(engineId || '');
+  const { data: engine, isLoading: isEngineLoading, error: engineError, refetch } = useEngine(engineId || '');
   const { data: sensors, isLoading: isSensorsLoading } = useEngineSensors(engineId || '');
   const { data: allAlerts } = useAlerts();
   
@@ -80,7 +81,15 @@ export const EngineDetail: React.FC = () => {
   }
 
   if (engineError || !engine) {
-    return <div className="p-8 text-rose-500 font-mono">Failed to load engine data.</div>;
+    return (
+      <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400">
+        <p className="font-mono font-bold mb-2">Failed to load engine data.</p>
+        <p className="text-xs font-mono mb-4">{engineError?.message || 'Engine not found'}</p>
+        <button onClick={() => refetch()} className="px-3 py-1 bg-rose-500 text-white rounded text-xs font-bold">
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -96,11 +105,12 @@ export const EngineDetail: React.FC = () => {
           </button>
           <div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white font-mono flex items-center gap-3">
-              {engine.engineId}
+              {formatEngineLabel(engine.engineId, engine.externalEngineId)}
               <RiskBadge category={engine.riskCategory} size="lg" />
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">
               {engine.modelType} | {engine.fleetGroup} | Latest: {engine.latestCycle} cyc
+              {engine.externalEngineId != null && ` | ID: ${engine.engineId}`}
             </p>
           </div>
         </div>
