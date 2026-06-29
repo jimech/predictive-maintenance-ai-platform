@@ -24,11 +24,14 @@ import { PlotlyChart } from '../components/PlotlyChart';
 import type { RiskCategory, EngineSummary } from '../api/types';
 import { useTheme } from '../context/ThemeContext';
 import { exportToCsv } from '../lib/exportCsv';
+import { formatEngineLabel } from '../lib/utils';
+import { useDemoMode } from '../context/DemoContext';
 
 export const FleetDashboard: React.FC = () => {
   const { data: fleet, isLoading, error, refetch, isRefetching } = useFleet();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { isDemoMode } = useDemoMode();
   const isDark = theme === 'dark';
 
   // Filters & Sorting state
@@ -51,7 +54,12 @@ export const FleetDashboard: React.FC = () => {
 
     return fleet.engines
       .filter((eng) => {
-        const matchesSearch = eng.engineId.toLowerCase().includes(search.toLowerCase()) || eng.modelType.toLowerCase().includes(search.toLowerCase());
+        const label = formatEngineLabel(eng.engineId, eng.externalEngineId).toLowerCase();
+        const matchesSearch =
+          label.includes(search.toLowerCase()) ||
+          eng.engineId.toLowerCase().includes(search.toLowerCase()) ||
+          eng.modelType.toLowerCase().includes(search.toLowerCase()) ||
+          (eng.externalEngineId != null && String(eng.externalEngineId).includes(search));
         const matchesCat = selectedCategory === 'all' || eng.riskCategory === selectedCategory;
         const matchesFleet = selectedFleetGroup === 'all' || eng.fleetGroup === selectedFleetGroup;
         
@@ -138,7 +146,9 @@ export const FleetDashboard: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] space-y-4">
         <RefreshCw className="w-10 h-10 text-indigo-500 animate-spin" />
-        <p className="text-sm font-mono text-slate-400">Querying FastAPI fleet telemetry (GET /api/v1/fleet)...</p>
+        <p className="text-sm font-mono text-slate-400">
+          {isDemoMode ? 'Loading mock fleet data...' : 'Querying FastAPI fleet telemetry (GET /api/v1/fleet)...'}
+        </p>
       </div>
     );
   }
@@ -515,7 +525,7 @@ export const FleetDashboard: React.FC = () => {
                   >
                     <td className="px-6 py-4 font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      {eng.engineId}
+                      {formatEngineLabel(eng.engineId, eng.externalEngineId)}
                     </td>
                     <td className="px-6 py-4">
                       <span className="block text-slate-900 dark:text-slate-200 font-sans font-semibold">{eng.fleetGroup}</span>

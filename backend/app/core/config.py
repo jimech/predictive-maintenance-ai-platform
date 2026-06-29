@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     mlflow_tracking_uri: str = "http://localhost:5000"
 
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     @property
     def sqlalchemy_database_url(self) -> str:

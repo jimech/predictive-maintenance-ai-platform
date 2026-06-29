@@ -4,8 +4,6 @@
  *
  * - Demo Mode ON  → mock data (mockData.ts)
  * - Demo Mode OFF → VITE_API_BASE_URL + contract types → mapped view models
- *
- * See ./README.md and docs/API_CONTRACT.md.
  */
 import {
   acknowledgeMockAlert,
@@ -52,7 +50,6 @@ import type {
   SensorReading,
 } from './types';
 
-/** Backend origin only — /api/v1 paths are appended per endpoint. */
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 let isDemoMode = localStorage.getItem('demoMode') !== 'false';
@@ -85,7 +82,11 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
   return url.toString();
 }
 
-async function fetchJson<T>(path: string, options: RequestInit = {}, query?: Record<string, string | number | undefined>): Promise<T> {
+async function fetchJson<T>(
+  path: string,
+  options: RequestInit = {},
+  query?: Record<string, string | number | undefined>,
+): Promise<T> {
   const response = await fetch(buildUrl(path, query), {
     ...options,
     headers: {
@@ -95,28 +96,22 @@ async function fetchJson<T>(path: string, options: RequestInit = {}, query?: Rec
   });
 
   if (!response.ok) {
-    throw new ApiError(response.status, `HTTP error! status: ${response.status}`);
+    const detail = await response.text().catch(() => '');
+    throw new ApiError(
+      response.status,
+      detail || `Request failed: ${response.status} ${response.statusText}`,
+    );
   }
 
   return response.json() as Promise<T>;
 }
 
-async function fetchOrMock<T>(
-  path: string,
-  options: RequestInit = {},
-  mockResolver: () => T | Promise<T>,
-  query?: Record<string, string | number | undefined>,
-): Promise<T> {
-  if (!isDemoMode) {
-    try {
-      return await fetchJson<T>(path, options, query);
-    } catch (err) {
-      console.warn(`[API Client] ${path} failed, falling back to mock data:`, err);
-    }
+async function withDemoMode<T>(mockResolver: () => T | Promise<T>, apiResolver: () => Promise<T>): Promise<T> {
+  if (isDemoMode) {
+    await delay(180);
+    return mockResolver();
   }
-
-  await delay(180);
-  return mockResolver();
+  return apiResolver();
 }
 
 function mapAdminJobToPipeline(job: ApiAdminJobResponse, action: PipelineJob['action']): PipelineJob {
@@ -147,93 +142,77 @@ function toApiPredictRequest(req: PredictRequest, engine?: EngineDetail | null):
 }
 
 export const apiClient = {
-  getFleet: async (): Promise<FleetResponse> => {
-    if (!isDemoMode) {
-      try {
+  getFleet: (): Promise<FleetResponse> =>
+    withDemoMode(
+      () => getMockFleet(),
+      async () => {
         const data = await fetchJson<ApiFleetResponse>(endpoints.fleet);
         return mapFleetResponse(data);
-      } catch (err) {
-        console.warn('[API Client] /fleet failed, falling back to mock data:', err);
-      }
-    }
-    await delay(180);
-    return getMockFleet();
-  },
+      },
+    ),
 
-  getEngine: async (engineId: string): Promise<EngineDetail> => {
-    if (!isDemoMode) {
-      try {
+  getEngine: (engineId: string): Promise<EngineDetail> =>
+    withDemoMode(
+      () => {
+        const eng = getMockEngineDetail(engineId);
+        if (!eng) throw new ApiError(404, `Engine ${engineId} not found`);
+        return eng;
+      },
+      async () => {
         const [detail, sensors] = await Promise.all([
           fetchJson<ApiEngineDetailResponse>(endpoints.engine(engineId)),
           fetchJson<ApiSensorHistoryResponse>(endpoints.engineSensors(engineId)),
         ]);
         return mapEngineDetail(detail, mapSensorHistory(sensors));
-      } catch (err) {
-        console.warn(`[API Client] /engines/${engineId} failed, falling back to mock data:`, err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    const eng = getMockEngineDetail(engineId);
-    if (!eng) throw new ApiError(404, `Engine ${engineId} not found`);
-    return eng;
-  },
-
-  getEngineSensors: async (engineId: string, query?: ApiSensorsQuery): Promise<SensorReading[]> => {
-    if (!isDemoMode) {
-      try {
+  getEngineSensors: (engineId: string, query?: ApiSensorsQuery): Promise<SensorReading[]> =>
+    withDemoMode(
+      () => {
+        const eng = getMockEngineDetail(engineId);
+        return eng ? eng.sensorHistory : [];
+      },
+      async () => {
         const data = await fetchJson<ApiSensorHistoryResponse>(
           endpoints.engineSensors(engineId),
           { method: 'GET' },
-          {
-            from_cycle: query?.from_cycle,
-            to_cycle: query?.to_cycle,
-          },
+          { from_cycle: query?.from_cycle, to_cycle: query?.to_cycle },
         );
         return mapSensorHistory(data);
-      } catch (err) {
-        console.warn(`[API Client] /engines/${engineId}/sensors failed, falling back to mock:`, err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    const eng = getMockEngineDetail(engineId);
-    return eng ? eng.sensorHistory : [];
-  },
-
-  predictRul: async (req: PredictRequest): Promise<PredictResponse> => {
-    if (!isDemoMode) {
-      try {
-        const engine = getMockEngineDetail(req.engineId);
-        const body = toApiPredictRequest(req, engine);
+  predictRul: (req: PredictRequest): Promise<PredictResponse> =>
+    withDemoMode(
+      async () => {
+        const eng = getMockEngineDetail(req.engineId);
+        if (!eng) throw new ApiError(404, 'Engine not found');
+        const result = runMockPredict(req.engineId, req.simulatedCyclesToAdd || 10);
+        return {
+          engineId: req.engineId,
+          originalRul: eng.estimatedRul + (req.simulatedCyclesToAdd || 10),
+          predictedRul: result.predictedRul,
+          confidenceScore: Number((0.92 - (result.predictedRul < 30 ? 0.08 : 0)).toFixed(2)),
+          newRiskCategory: result.riskCategory,
+          aiExplanation: `Model re-evaluated with +${req.simulatedCyclesToAdd || 10} cycles. Risk updated to ${result.riskCategory.toUpperCase()}.`,
+        };
+      },
+      async () => {
+        const eng = getMockEngineDetail(req.engineId);
+        const body = toApiPredictRequest(req, eng);
         const data = await fetchJson<ApiPredictResponse>(endpoints.predict, {
           method: 'POST',
           body: JSON.stringify(body),
         });
         return mapPredictResponse(req.engineId, data);
-      } catch (err) {
-        console.warn('[API Client] /predict failed, falling back to mock data:', err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    const eng = getMockEngineDetail(req.engineId);
-    if (!eng) throw new ApiError(404, 'Engine not found');
-
-    const result = runMockPredict(req.engineId, req.simulatedCyclesToAdd || 10);
-    return {
-      engineId: req.engineId,
-      originalRul: eng.estimatedRul + (req.simulatedCyclesToAdd || 10),
-      predictedRul: result.predictedRul,
-      confidenceScore: Number((0.92 - (result.predictedRul < 30 ? 0.08 : 0)).toFixed(2)),
-      newRiskCategory: result.riskCategory,
-      aiExplanation: `Model re-evaluated with +${req.simulatedCyclesToAdd || 10} cycles. Risk updated to ${result.riskCategory.toUpperCase()}.`,
-    };
-  },
-
-  getAlerts: async (query?: ApiAlertsQuery): Promise<AlertItem[]> => {
-    if (!isDemoMode) {
-      try {
+  getAlerts: (query?: ApiAlertsQuery): Promise<AlertItem[]> =>
+    withDemoMode(
+      () => getMockAlerts(),
+      async () => {
         const data = await fetchJson<ApiAlertsResponse>(
           endpoints.alerts,
           { method: 'GET' },
@@ -244,66 +223,43 @@ export const apiClient = {
           },
         );
         return mapAlertsResponse(data);
-      } catch (err) {
-        console.warn('[API Client] /alerts failed, falling back to mock data:', err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    return getMockAlerts();
-  },
-
-  acknowledgeAlert: async (alertId: string, userName?: string): Promise<AlertItem> => {
-    if (!isDemoMode) {
-      try {
+  acknowledgeAlert: (alertId: string, userName?: string): Promise<AlertItem> =>
+    withDemoMode(
+      () => acknowledgeMockAlert(alertId, userName),
+      async () => {
         await fetchJson(endpoints.acknowledgeAlert(alertId), { method: 'POST' });
         const alerts = await apiClient.getAlerts();
         const updated = alerts.find((a) => a.alertId === alertId);
-        if (updated) return { ...updated, status: 'acknowledged', acknowledgedBy: userName };
-      } catch (err) {
-        console.warn(`[API Client] acknowledge ${alertId} failed, falling back to mock:`, err);
-      }
-    }
+        if (!updated) throw new ApiError(404, `Alert ${alertId} not found after acknowledge`);
+        return { ...updated, status: 'acknowledged', acknowledgedBy: userName };
+      },
+    ),
 
-    await delay(180);
-    return acknowledgeMockAlert(alertId, userName);
-  },
-
-  resolveAlert: async (alertId: string): Promise<AlertItem> => {
-    if (!isDemoMode) {
-      try {
+  resolveAlert: (alertId: string): Promise<AlertItem> =>
+    withDemoMode(
+      () => resolveMockAlert(alertId),
+      async () => {
         await fetchJson(endpoints.resolveAlert(alertId), { method: 'POST' });
         const alerts = await apiClient.getAlerts();
         const updated = alerts.find((a) => a.alertId === alertId);
-        if (updated) return { ...updated, status: 'resolved' };
-      } catch (err) {
-        console.warn(`[API Client] resolve ${alertId} failed, falling back to mock:`, err);
-      }
-    }
+        if (!updated) throw new ApiError(404, `Alert ${alertId} not found after resolve`);
+        return { ...updated, status: 'resolved' };
+      },
+    ),
 
-    await delay(180);
-    return resolveMockAlert(alertId);
-  },
-
-  getModels: async (): Promise<AIModel[]> => {
-    if (!isDemoMode) {
-      try {
+  getModels: (): Promise<AIModel[]> =>
+    withDemoMode(
+      () => getMockModels(),
+      async () => {
         const data = await fetchJson<ApiModelsResponse>(endpoints.models);
         return mapModelsResponse(data);
-      } catch (err) {
-        console.warn('[API Client] /models failed, falling back to mock data:', err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    return getMockModels();
-  },
-
-  /** Frontend-only helper — not in API contract; mock-only until backend adds it. */
   getAdminStatus: async (): Promise<{ dataset: DatasetStatus; activeJob: PipelineJob }> => {
-    if (!isDemoMode) {
-      console.info('[API Client] /admin/status is not in API contract; using mock admin status.');
-    }
     await delay(180);
     return {
       dataset: getMockDatasetStatus(),
@@ -311,49 +267,34 @@ export const apiClient = {
     };
   },
 
-  loadDataset: async (): Promise<PipelineJob> => {
-    if (!isDemoMode) {
-      try {
+  loadDataset: (): Promise<PipelineJob> =>
+    withDemoMode(
+      () => triggerMockPipelineJob('load_dataset'),
+      async () => {
         const data = await fetchJson<ApiAdminJobResponse>(endpoints.adminLoadDataset, { method: 'POST' });
         return mapAdminJobToPipeline(data, 'load_dataset');
-      } catch (err) {
-        console.warn('[API Client] /admin/datasets/load failed, falling back to mock:', err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    return triggerMockPipelineJob('load_dataset');
-  },
-
-  preprocessDataset: async (): Promise<PipelineJob> => {
-    if (!isDemoMode) {
-      try {
+  preprocessDataset: (): Promise<PipelineJob> =>
+    withDemoMode(
+      () => triggerMockPipelineJob('preprocess'),
+      async () => {
         const data = await fetchJson<ApiAdminJobResponse>(endpoints.adminPreprocess, { method: 'POST' });
         return mapAdminJobToPipeline(data, 'preprocess');
-      } catch (err) {
-        console.warn('[API Client] /admin/preprocess failed, falling back to mock:', err);
-      }
-    }
+      },
+    ),
 
-    await delay(180);
-    return triggerMockPipelineJob('preprocess');
-  },
-
-  trainModel: async (modelType: 'baseline' | 'lstm' | 'gru'): Promise<PipelineJob> => {
-    if (!isDemoMode) {
-      try {
+  trainModel: (modelType: 'baseline' | 'lstm' | 'gru'): Promise<PipelineJob> =>
+    withDemoMode(
+      () => triggerMockPipelineJob(modelType === 'lstm' || modelType === 'gru' ? 'train_lstm' : 'train_baseline'),
+      async () => {
         const data = await fetchJson<ApiAdminJobResponse>(endpoints.adminTrain, {
           method: 'POST',
           body: JSON.stringify({ model_type: modelType }),
         });
         const action = modelType === 'lstm' || modelType === 'gru' ? 'train_lstm' : 'train_baseline';
         return mapAdminJobToPipeline(data, action);
-      } catch (err) {
-        console.warn('[API Client] /admin/train failed, falling back to mock:', err);
-      }
-    }
-
-    await delay(180);
-    return triggerMockPipelineJob(modelType === 'lstm' || modelType === 'gru' ? 'train_lstm' : 'train_baseline');
-  },
+      },
+    ),
 };

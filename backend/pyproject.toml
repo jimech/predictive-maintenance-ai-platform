@@ -18,9 +18,14 @@ dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
     "httpx>=0.28.0",
+    "pandas>=2.2.0",
 ]
 ml = [
-    "mlflow>=2.18.0",
+    "mlflow>=2.18.0,<3.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.5.0",
+    "joblib>=1.4.0",
+    "torch>=2.0.0",
 ]
 
 [build-system]
@@ -28,7 +33,7 @@ requires = ["setuptools>=75.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["app", "app.api", "app.api.v1", "app.core", "app.db", "app.schemas", "app.services", "app.ml"]
+packages = ["app", "app.api", "app.api.v1", "app.core", "app.db", "app.schemas", "app.services", "app.ml", "app.ml.data", "app.ml.features", "app.ml.models", "app.ml.training"]
 
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]

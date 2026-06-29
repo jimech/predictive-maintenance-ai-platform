@@ -56,6 +56,19 @@ Create a new migration after model changes:
 alembic revision --autogenerate -m "describe change"
 ```
 
+## C-MAPSS dataset loader (FD001)
+
+Place `train_FD001.txt`, `test_FD001.txt`, and `RUL_FD001.txt` in a directory, then:
+
+```python
+from pathlib import Path
+from app.ml.data import compute_training_rul_labels, load_fd001, save_raw_artifacts
+
+dataset = load_fd001(Path("/path/to/cmapss/FD001"))
+paths = save_raw_artifacts(dataset, Path("app/ml/data/artifacts"))
+labeled_train = compute_training_rul_labels(dataset.train, cap=130)
+```
+
 ## Docker
 
 ```bash

@@ -73,7 +73,7 @@ Services:
 | Frontend | http://localhost:3000 |
 | Backend | http://localhost:8000 |
 | Postgres | localhost:5432 |
-| MLflow | http://localhost:5000 |
+| MLflow | http://localhost:5001 |
 
 ## Documentation
 

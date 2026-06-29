@@ -7,6 +7,7 @@ export type RiskCategory = 'healthy' | 'watch' | 'warning' | 'critical';
 
 export interface EngineSummary {
   engineId: string;
+  externalEngineId?: number;
   fleetGroup: string;
   modelType: string;
   latestCycle: number;

@@ -4,13 +4,35 @@ import { useModels } from '../hooks/useModels';
 import { exportToCsv } from '../lib/exportCsv';
 
 export const Models: React.FC = () => {
-  const { data: models, isLoading } = useModels();
+  const { data: models, isLoading, error, refetch } = useModels();
 
   if (isLoading) {
     return <div className="p-8 text-center font-mono text-slate-500">Loading model benchmarks...</div>;
   }
 
-  const prodModel = models?.find(m => m.isProduction);
+  if (error) {
+    return (
+      <div className="p-8 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400">
+        <p className="font-mono font-bold mb-2">Failed to load models.</p>
+        <p className="text-xs font-mono mb-4">{error.message}</p>
+        <button onClick={() => refetch()} className="px-3 py-1 bg-rose-500 text-white rounded text-xs font-bold">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!models || models.length === 0) {
+    return (
+      <div className="p-12 text-center bg-white dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800 border-dashed">
+        <Cpu className="w-8 h-8 text-slate-400 mx-auto mb-3" />
+        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">No models registered</h3>
+        <p className="text-xs text-slate-500 mt-1">Train a model from the Admin page to populate this list.</p>
+      </div>
+    );
+  }
+
+  const prodModel = models.find(m => m.isProduction);
 
   return (
     <div className="space-y-6">
@@ -90,7 +112,7 @@ export const Models: React.FC = () => {
               </tr>
             </thead>
             <tbody className="text-sm divide-y divide-slate-200 dark:divide-slate-800/50 font-mono">
-              {models?.map((model) => (
+              {models.map((model) => (
                 <tr key={model.modelId} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                   <td className="px-6 py-4">
                     <div className="font-bold text-slate-900 dark:text-white">{model.modelId}</div>
