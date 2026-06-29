@@ -11,10 +11,10 @@ export function useEngine(engineId: string) {
   });
 }
 
-export function useEngineSensors(engineId: string) {
+export function useEngineSensors(engineId: string, fromCycle?: number, toCycle?: number) {
   return useQuery({
-    queryKey: ['engine', engineId, 'sensors'],
-    queryFn: () => apiClient.getEngineSensors(engineId),
+    queryKey: ['engine', engineId, 'sensors', fromCycle, toCycle],
+    queryFn: () => apiClient.getEngineSensors(engineId, { from_cycle: fromCycle, to_cycle: toCycle }),
     enabled: Boolean(engineId),
   });
 }

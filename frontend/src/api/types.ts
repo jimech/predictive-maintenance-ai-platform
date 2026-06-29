@@ -1,3 +1,8 @@
+/**
+ * Frontend view models used by pages and components.
+ * Backend wire types live in ./contract.ts; mapping in ./mappers.ts.
+ */
+
 export type RiskCategory = 'healthy' | 'watch' | 'warning' | 'critical';
 
 export interface EngineSummary {
